@@ -7,6 +7,8 @@
 // You can also remove this file if you'd prefer not to use a
 // service worker, and the Workbox build step will be skipped.
 
+import Dexie from "dexie";
+
 import { clientsClaim } from "workbox-core";
 import { ExpirationPlugin } from "workbox-expiration";
 import { precacheAndRoute, createHandlerBoundToURL } from "workbox-precaching";
@@ -22,6 +24,7 @@ import { Strategy } from "workbox-strategies";
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
 import { setCatchHandler } from "workbox-routing";
 import { getData, getData2 } from "./get";
+import db from "./db";
 
 clientsClaim();
 
@@ -79,6 +82,35 @@ class CacheNetworkRace extends Strategy {
     const fetchAndCachePutDone = handler.fetchAndCachePut(request);
     const cacheMatchDone = handler.cacheMatch(request);
 
+    // Now add some values.
+    db.open()
+      .then(function () {
+        return db.friends.add({ name: "Foo", age: 42 });
+      })
+      .then(function () {
+        return db.friends.where("age").between(40, 65).toArray();
+      })
+      .then(function (friends) {
+        console.log("Found friends: " + JSON.stringify(friends, null, 2));
+      })
+      .catch(Dexie.MissingAPIError, function (e) {
+        console.log("Couldn't find indexedDB API");
+      })
+      .catch("SecurityError", function (e) {
+        console.log(
+          "SeurityError - This browser doesn't like fiddling with indexedDB."
+        );
+        console.log(
+          "If using Safari, this is because jsfiddle runs its samples within an iframe"
+        );
+        console.log(
+          "Go run some samples instead at: https://github.com/dfahlander/Dexie.js/wiki/Samples"
+        );
+      })
+      .catch(function (e) {
+        console.log(e);
+      });
+
     return new Promise((resolve, reject) => {
       fetchAndCachePutDone.then(resolve);
       cacheMatchDone.then((response) => response && resolve(response));
@@ -123,7 +155,7 @@ self.addEventListener("message", async (event) => {
   if (event.data && event.data.type === "MESSAGE_IDENTIFIER") {
     // do something
     console.log(event);
-    const data = await getData2();
+    const data = await getData();
     console.log(data);
   }
 });
