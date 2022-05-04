@@ -168,8 +168,12 @@ class IndexedDbStrategy extends Strategy {
         const data = await clonedResponse.json();
 
         // Now add some values.
-        await db.open();
-        await db.addresses.add({ url: request.url, data });
+        try {
+          await db.open();
+          await db.addresses.add({ url: request.url, data });
+        } catch (e) {
+          console.error(e);
+        }
 
         resolve(response);
       } catch (er) {
