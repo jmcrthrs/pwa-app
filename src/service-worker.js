@@ -144,19 +144,13 @@ class IndexedDbStrategy extends Strategy {
             .where("url")
             .equals(request.url)
             .first();
-          console.log(cachedData);
-          try {
-            resolve(
-              new Response(JSON.stringify(cachedData.data), {
-                headers: { "Content-Type": "text/json" },
-                status: 200,
-                statusText: "I am a custom service worker response!",
-              })
-            );
-          } catch (e) {
-            console.error("NO", e);
-            throw e;
-          }
+          resolve(
+            new Response(JSON.stringify(cachedData.data), {
+              headers: { "Content-Type": "text/json" },
+              status: 200,
+              statusText: "I am a custom service worker response!",
+            })
+          );
           return;
         }
         /**
@@ -170,7 +164,7 @@ class IndexedDbStrategy extends Strategy {
         // Now add some values.
         try {
           await db.open();
-          await db.addresses.add({ url: request.url, data });
+          await db.addresses.put({ url: request.url, data });
         } catch (e) {
           console.error(e);
         }
