@@ -77,39 +77,39 @@ registerRoute(
   })
 );
 
-class CacheNetworkRace extends Strategy {
+class Idb extends Strategy {
   _handle(request, handler) {
     const fetchAndCachePutDone = handler.fetchAndCachePut(request);
     const cacheMatchDone = handler.cacheMatch(request);
 
-    // Now add some values.
-    db.open()
-      .then(function () {
-        return db.friends.add({ name: "Foo", age: 42 });
-      })
-      .then(function () {
-        return db.friends.where("age").between(40, 65).toArray();
-      })
-      .then(function (friends) {
-        console.log("Found friends: " + JSON.stringify(friends, null, 2));
-      })
-      .catch(Dexie.MissingAPIError, function (e) {
-        console.log("Couldn't find indexedDB API");
-      })
-      .catch("SecurityError", function (e) {
-        console.log(
-          "SeurityError - This browser doesn't like fiddling with indexedDB."
-        );
-        console.log(
-          "If using Safari, this is because jsfiddle runs its samples within an iframe"
-        );
-        console.log(
-          "Go run some samples instead at: https://github.com/dfahlander/Dexie.js/wiki/Samples"
-        );
-      })
-      .catch(function (e) {
-        console.log(e);
-      });
+    // // Now add some values.
+    // db.open()
+    //   .then(function () {
+    //     return db.friends.add({ name: "Foo", age: 42 });
+    //   })
+    //   .then(function () {
+    //     return db.friends.where("age").between(40, 65).toArray();
+    //   })
+    //   .then(function (friends) {
+    //     console.log("Found friends: " + JSON.stringify(friends, null, 2));
+    //   })
+    //   .catch(Dexie.MissingAPIError, function (e) {
+    //     console.log("Couldn't find indexedDB API");
+    //   })
+    //   .catch("SecurityError", function (e) {
+    //     console.log(
+    //       "SeurityError - This browser doesn't like fiddling with indexedDB."
+    //     );
+    //     console.log(
+    //       "If using Safari, this is because jsfiddle runs its samples within an iframe"
+    //     );
+    //     console.log(
+    //       "Go run some samples instead at: https://github.com/dfahlander/Dexie.js/wiki/Samples"
+    //     );
+    //   })
+    //   .catch(function (e) {
+    //     console.log(e);
+    //   });
 
     return new Promise((resolve, reject) => {
       fetchAndCachePutDone.then(resolve);
@@ -131,12 +131,72 @@ class CacheNetworkRace extends Strategy {
   }
 }
 
+class IndexedDbStrategy extends Strategy {
+  _handle(request, handler) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        /**
+         * If we are offline, fetch from indexedDb
+         */
+        if (!navigator.onLine) {
+          await db.open();
+          const cachedData = await db.addresses
+            .where("url")
+            .equals(request.url)
+            .first();
+          console.log(cachedData);
+          try {
+            resolve(
+              new Response(JSON.stringify(cachedData.data), {
+                headers: { "Content-Type": "text/json" },
+                status: 200,
+                statusText: "I am a custom service worker response!",
+              })
+            );
+          } catch (e) {
+            console.error("NO", e);
+            throw e;
+          }
+          return;
+        }
+        /**
+         * If we are online, fetch from remote and cache response
+         * in indexedDb
+         */
+        const response = await handler.fetch(request);
+        const clonedResponse = response.clone();
+        const data = await clonedResponse.json();
+
+        // Now add some values.
+        await db.open();
+        await db.addresses.add({ url: request.url, data });
+
+        resolve(response);
+      } catch (er) {
+        console.error(er);
+        reject(er);
+      }
+    });
+  }
+}
+
+// self.addEventListener('fetch', function(event) {                         1
+//   if (/\.jpg$/.test(event.request.url)) {                                2
+//     event.respondWith(
+//     new Response('<p>This is a response that comes from your service worker!</p>', {
+//        headers: { 'Content-Type': 'text/html' }                          3
+//       });
+//     );
+//   }
+// });
+
 registerRoute(
   // Add in any other file extensions or routing criteria as needed.
-  async ({ url }) => {
+  ({ url }) => {
     return url.pathname === "/api/address/random_address";
   },
-  new CacheNetworkRace()
+  //https://developer.chrome.com/docs/workbox/modules/workbox-strategies/#network-first-network-falling-back-to-cache
+  new IndexedDbStrategy()
 );
 
 // // This allows the web app to trigger skipWaiting via
